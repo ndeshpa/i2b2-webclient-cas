@@ -108,20 +108,14 @@ i2b2.PM._processUserConfigSuccess = function (data) {
 		} else {
 		    i2b2.PM.model.IdleTimer.start(timeout-300000); //timeout); //timeout-60000);		
 		}
-	} catch (e) {
-		//console.error("Could not find returned password node in login XML");
+    } catch (e) {
+		if (i2b2.PM.model.EC_I2B2_INTEGRATION_URL) {
+	    //console.error("Could not find returned password node in login XML");
 	    i2b2.PM.model.login_password = "<password>"+data.msgParams.sec_pass+"</password>\n";
-	    if (i2b2.PM.model.CAS_server) {
-	    	if (readCookie("CAS_ticket")) {
-	    		eraseCookie("CAS_ticket");
-	    		i2b2.PM.doCASLogin();
-	    		return true;
-	    	} else {
-			console.error("I2b2 web client did not get a user account back. Perhaps the i2b2 server was restarted?");
-			alert("I2b2 web client got an unexpected response from the i2b2 server. Try reloading the page.");
-			return false;
-	    	}
-	    }
+	    console.error("I2b2 web client did not get a user account back. Perhaps the i2b2 server was restarted?");
+	    alert("I2b2 web client got an unexpected response from the i2b2 server. Try reloading the page.");
+		    return false;
+		}
 	}	
 	// clear the password
 	i2b2.PM.udlogin.inputPass.value = "";
@@ -241,10 +235,10 @@ i2b2.PM._processUserConfigSuccess = function (data) {
 			alert("The PM Cell is down or the address in the properties file is incorrect.");	
 			//alert("Your account does not have access to any i2b2 projects.");		
 		}
-	    if (undefined == i2b2.PM.model.CAS_server) {
+	    if (undefined == i2b2.PM.model.EC_I2B2_INTEGRATION_URL) {
 		    try { i2b2.PM.view.modal.login.show(); } catch(e) {}
-		}
-		return true;
+	    }
+	    return true;
 	} else if (projs.length == 1) {
 		// default to the only project the user has access to
 		i2b2.PM.model.login_project = i2b2.h.XPath(projs[0], 'attribute::id')[0].nodeValue;
@@ -327,10 +321,8 @@ i2b2.PM.getEurekaClinicalSession = function(url, params) {
 }
 
 i2b2.PM._checkUserAgreement = function(data, successCallback, skipRetry) {
-    if (i2b2.PM.model.EC_USER_AGREEMENT_URL) {
-	i2b2.PM.getEurekaClinicalSession(i2b2.PM.model.EC_USER_AGREEMENT_URL, {
-	    onSuccess: function (response) {
-		new Ajax.Request(i2b2.PM.model.EC_USER_AGREEMENT_URL + '/proxy-resource/useragreementstatuses/me?status=ACTIVE', {
+    if (i2b2.PM.model.EC_I2B2_INTEGRATION_URL && i2b2.PM.model.EC_USER_AGREEMENT_URL) {
+		new Ajax.Request(i2b2.PM.model.EC_I2B2_INTEGRATION_URL + '/proxy-resource/useragreementstatuses/me?status=ACTIVE', {
 		    method: 'get',
 		    contentType: 'application/json',
 		    onSuccess: function (response) {
@@ -357,12 +349,6 @@ i2b2.PM._checkUserAgreement = function(data, successCallback, skipRetry) {
 			}
 		    }
 		});
-	    },
-	    onFailure: function (response) {
-		i2b2.PM._processUserConfigFailure();
-	    }
-	})
-	
     }
 }
 
@@ -397,12 +383,6 @@ i2b2.PM._processUserConfig = function (data) {
 	        if (!i2b2.PM.model.EC_I2B2_INTEGRATION_URL) {
 		    i2b2.PM._processUserConfigFailure();
 		} else {
-		    i2b2.PM.getEurekaClinicalSession(i2b2.PM.model.EC_I2B2_INTEGRATION_URL, {
-			onSuccess: function (response) {
-			    new Ajax.Request(i2b2.PM.model.EC_I2B2_INTEGRATION_URL + '/proxy-resource/users/auto', {
-				method: 'get',
-				contentType: 'application/json',
-				onSuccess: function (response) {
 				    if (!i2b2.PM.model.EC_USER_AGREEMENT_URL) {
 					new Ajax.Request(i2b2.PM.model.EC_I2B2_INTEGRATION_URL + '/proxy-resource/i2b2users/auto', {
 					    method: 'post',
@@ -425,18 +405,7 @@ i2b2.PM._processUserConfig = function (data) {
 						}
 					    });
 					});
-				    }
-				},
-				onFailure: function (response) {
-				    i2b2.PM._processUserConfigFailure();
-				}
-			    });
-			},
-			onFailure: function (response) {
-			    i2b2.PM._processUserConfigFailure();
-			}
-		    });
-	            
+                    } 
 		}
 	        return false;
 	    case 'EINTERNAL':
@@ -455,11 +424,9 @@ i2b2.PM._processUserConfig = function (data) {
 // ================================================================================================== //
 i2b2.PM.doLogout = function() {
     i2b2.PM._destroyEurekaClinicalSessions(function() {
-	if (undefined != i2b2.PM.model.CAS_server) {
-	    eraseCookie("JSESSIONID");
+	if (i2b2.PM.model.CAS_SERVER) {
 	    if (i2b2.PM.model.CAS_LOGOUT_TYPE === 'CAS') {
-		eraseCookie("CAS_ticket");
-		window.location=i2b2.PM.model.CAS_server + "logout";
+		window.location=i2b2.PM.model.CAS_SERVER + "/logout";
                 return;
 	    }
 	}
