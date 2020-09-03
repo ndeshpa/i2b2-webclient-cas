@@ -7,7 +7,7 @@ The i2b2 Web Client Repository contains the source code for the i2b2 Web Client.
 [Georgia Clinical and Translational Science Alliance (Georgia CTSA)](http://www.georgiactsa.org), [Emory University](http://www.emory.edu), Atlanta, GA
 
 ## What does it do?
-This is a stock i2b2 1.7.12a web client patched with support for 
+This is a stock i2b2 1.7.09c web client patched with support for 
 * delegating authentication to [Eureka! Clinical CAS](https://github.com/eurekaclinical/cas) or other CAS server that supports version 2 of the CAS protocol
 * automated i2b2 account creation using the [Eureka! Clinical i2b2 Integration microservice](https://github.com/eurekaclinical/eurekaclinical-i2b2-integration-service)
 * requiring users to sign an electronic data use agreement using [Eureka! Clinical User Agreement microservice](https://github.com/eurekaclinical/eurekaclinical-user-agreement-service)
@@ -27,6 +27,20 @@ Commented out the Project Request plugin in the plugin registry list.
 
 ### Version 1.0
 Initial release using version 1.7.05 of the web client.
+
+## CAS implementations supported
+We expect any full implementation of version 2 of the CAS protocol to work. In particular, the implementation must support proxying. The following implementations of CAS are known to work:
+* [Eureka! Clinical CAS](https://github.com/eurekaclinical/cas), which is a patched version of [JASIG CAS version 3.5.2](https://wiki.jasig.org/display/CASUM/Home)
+* [Shibboleth Identity Provider version 3](https://wiki.shibboleth.net/confluence/display/IDP30/Home) with CAS emulation turned on
+
+## Requirements
+See the [i2b2 Web Client Install guide](http://community.i2b2.org/wiki/display/getstarted/Chapter+7.+i2b2+Web+Client+Install) for requirements for the web client itself. The Eureka! Clinical components require:
+* [Oracle Java JRE 8](http://www.oracle.com/technetwork/java/javase/overview/index.html)
+* [Tomcat 7](https://tomcat.apache.org)
+* One of the following relational databases:
+  * [Oracle](https://www.oracle.com/database/index.html) 11g or greater
+  * [PostgreSQL](https://www.postgresql.org) 9.1 or greater
+  * [H2](http://h2database.com) 1.4.193 or greater (for testing)
 
 ## Installation
 Installation instructions can be found in the [INSTALL-README.md](/INSTALL-README.md) file. 
