@@ -31,6 +31,8 @@ i2b2.ONT.view.find.showOptions = function(subScreen) {
 					i2b2.ONT.view['find'].params.max = parseInt($('ONTFINDMaxQryDisp').value,10);
 					i2b2.ONT.view['find'].params.synonyms = $('ONTFINDshowSynonyms').checked;
 					i2b2.ONT.view['find'].params.hiddens = $('ONTFINDshowHiddens').checked;
+					i2b2.ONT.view['find'].params.reduce = !$('ONTFINDreduceResults').checked;
+					i2b2.ONT.view['find'].params.hierarchy = $('ONTFINDhierarchy').checked;
 				}
 			} else {
 				alert('Please enter a valid number for Maximum Children to Display.');
@@ -64,6 +66,7 @@ i2b2.ONT.view.find.showOptions = function(subScreen) {
 	i2b2.ONT.view['find'].params.max = parseInt($('ONTFINDMaxQryDisp').value,10);
 	i2b2.ONT.view['find'].params.synonyms = $('ONTFINDshowSynonyms').checked;
 	i2b2.ONT.view['find'].params.hiddens = $('ONTFINDshowHiddens').checked;
+	i2b2.ONT.view['find'].params.reduce = !$('ONTFINDreduceResults').checked;
 
 	//$('ONTFINDMaxQryDisp').value = this.params.max;
 	//$('ONTFINDshowSynonyms').checked = parseBoolean(this.params.synonyms);
@@ -336,6 +339,14 @@ i2b2.ONT.view.find.showConceptCode = function() {
 //================================================================================================== //
 i2b2.ONT.view.find.doRefreshAll = function() { 
 	i2b2.ONT.view.find.PopulateCategories();
+	switch(i2b2.ONT.view.find.currentTab) { /* Redo the current search when refreshing all */
+		case "names":
+			i2b2.ONT.ctrlr.FindBy.clickSearchName();
+			break;
+		case "codes":
+			i2b2.ONT.ctrlr.FindBy.clickSearchCode();
+			break;
+	}
 }
 
 //================================================================================================== //
@@ -346,6 +357,18 @@ i2b2.ONT.view.find.doShowModifiers = function(e) {
 	i2b2.ONT.view.find.Resize();
 	i2b2.hive.MasterView.addZoomWindow("ONT");
 //	i2b2.ONT.view.nav.PopulateCategories();
+}
+
+//================================================================================================== //
+i2b2.ONT.view.find.doFindInTree = function(e) { 
+	i2b2.ONT.view.nav.yuiTree.root.collapseAll();
+	var op = i2b2.ONT.view.find.contextRecord;	
+	if($('ontMainBox').style.display == "none")
+		i2b2.ONT.view.main.ZoomView();
+	$('tabNavigate').click();
+	i2b2.ONT.view.nav.findByPath(i2b2.ONT.view.nav.yuiTree.root,op.sdxInfo.sdxKeyValue)
+	
+	//i2b2.hive.MasterView.addZoomWindow("ONT");
 }
 
 // ================================================================================================== //
@@ -381,16 +404,13 @@ i2b2.ONT.view.find.ContextMenuValidate = function(p_oEvent) {
 		tvNode = i2b2.ONT.view.find.yuiTreeCode.getNodeByProperty('nodeid', clickId);
 	}
 
-	if (tvNode) {
-		if (tvNode.data.i2b2_SDX) {
-			if (tvNode.data.i2b2_SDX.sdxInfo.sdxType == "CONCPT") {
+	if (tvNode && tvNode.data.i2b2_SDX && tvNode.data.i2b2_SDX.sdxInfo.sdxType == "CONCPT") {
 				i2b2.ONT.view.find.contextRecord = tvNode.data.i2b2_SDX;
-			} else {
-				this.cancel();
-				return;
-			}
-		}
+	} else {
+		this.cancel();
+		return;
 	}
+
 };
 
 //================================================================================================== //
@@ -400,7 +420,8 @@ i2b2.ONT.view.find.ContextMenu = new YAHOO.widget.ContextMenu(
 			trigger: $('ontFindDisp'), 
 			itemdata: [
 				{ text: "Refresh All",	onclick: { fn: i2b2.ONT.view.find.doRefreshAll } },
-				{ text: "Find Modifiers",	onclick: { fn: i2b2.ONT.view.find.doShowModifiers } }
+				{ text: "Find Modifiers",	onclick: { fn: i2b2.ONT.view.find.doShowModifiers } },
+				{ text: "Find Term in Tree",	onclick: { fn: i2b2.ONT.view.find.doFindInTree } }
 		] }  
 ); 
 //================================================================================================== //
