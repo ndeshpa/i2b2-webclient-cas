@@ -3,9 +3,11 @@
  * @inherits 	i2b2.ONT.ctrlr
  * @namespace	i2b2.ONT.ctrlr.FindBy
  * @author		Nick Benik, Griffin Weber MD PhD
- * @version 	1.3
+ * @version 	1.7.12
  * ----------------------------------------------------------------------------------------
  * updated 9-15-08: RC4 launch [Nick Benik] 
+ * updated 01-12-18: Mauro Bucalo
+ * hierarchical result display 08-19 by Jeff Klann, PhD
  */
 console.group('Load & Execute component file: ONT > ctrlr > FindBy');
 console.time('execute time');
@@ -48,6 +50,9 @@ i2b2.ONT.ctrlr.FindBy = {
 		//   Category: what category is being searched.  Blank for all
 		//   Strategy: what matching strategy should be used
 
+		// Debug: add time check
+		var mytime = new Date().getTime();
+			
 		// VERIFY that the above information has been passed		
 		var f = false;
 		if (Object.isUndefined(inSearchData)) return false;
@@ -70,8 +75,6 @@ i2b2.ONT.ctrlr.FindBy = {
 				s = 'contains';
 		}
 		inSearchData.Strategy = s;
-		
-		
 
 		// special client processing to search all categories
 		var searchCats = [];
@@ -116,7 +119,7 @@ i2b2.ONT.ctrlr.FindBy = {
 			//			msgResponse: xml (string)
 			//			error: boolean
 			//			errorStatus: string [only with error=true]
-			//			errorMsg: string [only with error=true]
+			//			errorMsg: string [only with error=true]			
 
 			//Create a new treeobject so it does not append 
 			//treeObj = new YAHOO.widget.TreeView("ontSearchNamesResults");
@@ -140,26 +143,137 @@ i2b2.ONT.ctrlr.FindBy = {
 				// we have a proper error msg
 				try {
 					if (s[0].firstChild.nodeValue == "MAX_EXCEEDED")
-						alert("The number of terms that were returned exceeded the maximum number currently set as " + i2b2.ONT.view['find'].params.max+ ".  Please try again with a more specific search or increase the maximum number of terms that can be returned as defined in the options screen.");
+						i2b2.h.nonmodalAlert("The number of terms that were returned for category " + results.msgParams.ont_category + " exceeded the maximum number currently set as " + i2b2.ONT.view['find'].params.max+ ".  Only the first " + i2b2.ONT.view['find'].params.max+ " results are displayed. Please try again with a more specific search or increase the maximum number of terms that can be returned as defined in the options screen.");
 					else
 						alert("ERROR: "+s[0].firstChild.nodeValue);	
 					document.getElementById('ontFindNameButtonWorking').style.display = 'none';	
 					$('ontFindNameButtonWorking').innerHTML = "";					
-					return;
+					//return;
 				} catch (e) {
 					alert("An unknown error has occured during your rest call attempt!");
 				}
 			} 
 		
+			higherNodes = { '.':treeObj.root }
+			makeHigherNode = function(parent,key,lvl,fullkey) {
+				var o = new Object;
+
+				o.search_viz_attr = "T";
+
+				o.name = key;
+				o.tooltip = key;
+				
+				o.hasChildren = lvl==1 ? 'CA':'FA';
+				o.level = lvl;
+				o.key = fullkey; // Note, some value required by SDX
+
+				var sdxDataNode = i2b2.sdx.Master.EncapsulateData('CONCPT',o);
+				var renderOptions = {
+					title: o.name,
+					dragdrop: "i2b2.sdx.TypeControllers.CONCPT.AttachDrag2Data",
+					click: "i2b2.ONT.view.info.SetKey('"+encodeURI(fullkey)+"')",
+					showchildren: true,
+					icon: {
+						root: "sdx_ONT_SEARCH_root2.gif",
+						rootExp: "sdx_ONT_SEARCH_root2.gif",
+						branch: "sdx_ONT_SEARCH_branch.gif",
+						branchExp: "sdx_ONT_SEARCH_branch.gif"
+					}
+				};
+				
+				parentNode = parent['.']
+				
+				var sdxRenderData = i2b2.sdx.Master.RenderHTML(treeObj.id, sdxDataNode, renderOptions);
+				var tmpNode = i2b2.sdx.Master.AppendTreeNode(treeObj, parentNode, sdxRenderData);
+				tmpNode.expand(); // Show children 
+				treeObj.draw(); // If this isn't here, some nodes are undraggable at random due to YUI
+				
+				return { '.':tmpNode }
+			}
+			getHigherNodes = function(key_name,key) { 
+				var keys = key.split("\\").slice(2,-1); // Skip the leading '\\', skip the final node
+				var key_names = key_name.split("\\").slice(1,-1); // Skip the leading '\', skip the final node	
+				var key_key_offset = keys.length - key_names.length; // Number of elements in key is different than key_name due to preamble
+				var parent = higherNodes;
+				for(var i2=0;i2<key_names.length-1;i2++) {
+					var fullkey = key.substring(0,i2b2.h.nthIndex(key,'\\',i2+key_key_offset+3)+1); 
+					var shortKeyname = key_names[i2];
+					if(!(shortKeyname in parent)) parent[shortKeyname]=makeHigherNode(parent,shortKeyname,i2+1,fullkey);
+					parent=parent[shortKeyname];
+				}
+				return parent;
+			}
+		
+			// Render the tree view showing the relative levels of the nodes in the find results (jgk 0519)
+			// TODO: If results are missing an hlevel (i.e. hlevel 3 and then hlevel 5), it might render the deeper hlevel as a root node
+			// NOTE: Looks best with hlevel-sorted results (ONT cell 1.7.12)
+			levelNodes = {}
+			// Helper function, get category from table code
+			getCatNameFromCode = function(code) {
+				var d = i2b2.ONT.model.Categories;
+				var l = d.length;
+				for (var i=0; i<l; i++) {
+					if(d[i].key.includes("\\"+code+"\\")) return d[i].name;
+				}
+				return code;
+			}
+			// Helper function, add hlevel nodes to the tree
+			getLevelNode = function(hlevel) {
+				if (hlevel in levelNodes) return levelNodes[hlevel]; // only add it once
+				
+				bAddRoot = !(hlevel-1 in levelNodes); // Name is category if its the root node
+				ontCat = getCatNameFromCode(results.msgParams.ont_category);
+				
+				var o = new Object;
+				if (bAddRoot) {
+					o.name = ontCat;
+					
+					o.tooltip='Find results for '+ontCat;
+				}
+				else {
+					o.name = 'More specific results....';//(Hierarchy level:'+hlevel+')';
+					
+					if (i2b2.ONT.view['find'].params.reduce) {
+						o.tooltip = 'These '+ontCat+' results are more specific (deeper in the hierarchy) and not contained in any of the folders above. [Hierarchy level '+hlevel+']';
+					} else {
+						o.tooltip = 'These '+ontCat+' results are more specific (deeper in the hierarchy). [Hierarchy level '+hlevel+']';
+					}
+				}
+				o.hasChildren = 'CA';
+				o.level = hlevel;
+				o.key = '\\'; // dummy: required by SDX
+
+				var sdxDataNode = i2b2.sdx.Master.EncapsulateData('CONCPT',o);
+				var renderOptions = {
+					title: o.name,
+					showchildren: true,
+					icon: {
+						root: "sdx_ONT_SEARCH_root.png",
+						rootExp: "sdx_ONT_SEARCH_root.png"
+					}
+				};
+				
+				if (!bAddRoot) {parentNode = levelNodes[hlevel-1];} else {parentNode=treeObj.root;}
+				 // add to appropriate level
+				var sdxRenderData = i2b2.sdx.Master.RenderHTML(treeObj.id, sdxDataNode, renderOptions);
+				var tmpNode = i2b2.sdx.Master.AppendTreeNode(treeObj, parentNode, sdxRenderData);
+				tmpNode.expand(); // Show children
+				levelNodes[hlevel]= tmpNode;
+			
+				return tmpNode;
+			}
 
 			// display the results
 			var c = results.refXML.getElementsByTagName('concept');
 			totalCount = totalCount + c.length;
+			var oset = [];
 			for(var i2=0; i2<1*c.length; i2++) {
+
 				var o = new Object;
 				o.xmlOrig = c[i2];
-				o.name = i2b2.h.getXNodeVal(c[i2],'name');
+				o.name = /*'['+i2b2.h.getXNodeVal(c[i2],'level')+'] ' +*/ i2b2.h.getXNodeVal(c[i2],'name');
 				o.hasChildren =  i2b2.h.getXNodeVal(c[i2],'visualattributes');
+				if (i2b2.h.getXNodeVal(c[i2],'key_name')) o.search_viz_attr = "N"; // Display as a result node in the search results
 				if (o.hasChildren != undefined && o.hasChildren.length > 1)
 				{
 					o.hasChildren = o.hasChildren.substring(0,2)
@@ -173,11 +287,23 @@ i2b2.ONT.ctrlr.FindBy = {
 				o.operator = i2b2.h.getXNodeVal(c[i2],'operator');
 				o.dim_code = i2b2.h.getXNodeVal(c[i2],'dimcode');
 				o.basecode = i2b2.h.getXNodeVal(c[i2],'basecode');
+				o.total_num = i2b2.h.getXNodeVal(c[i2],'totalnum');
+				oset.push(o);
+			}
+			//oset.sort(function(a,b) {return (a.key > b.key) ? 1 : ((b.key > a.key) ? -1 : 0);} );
+			for(var i2=0;i2<oset.length;i2++) {
+				var o = oset[i2];
+				// parent nodes
+				if (i2b2.h.getXNodeVal(c[i2],'key_name')) // && i2b2.ONT.view['find'].params.hierarchy)
+					var parentNode = getHigherNodes(i2b2.h.getXNodeVal(c[i2],'key_name'),i2b2.h.getXNodeVal(c[i2],'key'))['.'];
+				else var parentNode = getLevelNode(i2b2.h.getXNodeVal(c[i2],'level'));
+				
 				// append the data node
 				var sdxDataNode = i2b2.sdx.Master.EncapsulateData('CONCPT',o);
 				var renderOptions = {
 					title: o.name,
 					dragdrop: "i2b2.sdx.TypeControllers.CONCPT.AttachDrag2Data",
+					click: "i2b2.ONT.view.info.SetKey('"+encodeURI(o.key)+"')",
 					showchildren: true,
 					icon: {
 						root: "sdx_ONT_CONCPT_root.gif",
@@ -188,18 +314,17 @@ i2b2.ONT.ctrlr.FindBy = {
 					}
 				};
 				var sdxRenderData = i2b2.sdx.Master.RenderHTML(treeObj.id, sdxDataNode, renderOptions);
-				i2b2.sdx.Master.AppendTreeNode(treeObj, treeObj.root, sdxRenderData);
-			//}
-			// redraw treeview
-				treeObj.draw();
-
+				i2b2.sdx.Master.AppendTreeNode(treeObj, parentNode, sdxRenderData);
 			}
+			
+			// redraw treeview
+			treeObj.draw();
 
 			// BUG FIX: WEBCLIENT-139 & WEBCLIENT-150
 			searchCatsCount++;
 			if(searchCatsCount == searchCats.length){ // found last scopedCallback AJAX call
-				if(totalCount == 0){
-					alert('No records found.');
+				if(totalCount == 0 && s.length == 0){ // s.length fix - don't display err messages twice
+					alert('No records found.'); // ' for category ' + results.msgParams.ont_category);
 				}
 				$('ontFindNameButtonWorking').innerHTML = "";
 			}
@@ -208,6 +333,12 @@ i2b2.ONT.ctrlr.FindBy = {
 
 			//document.getElementById('ontFindNameButtonWorking').style.display = 'none';
 
+				
+			// How long did it take?
+			if (searchCatsCount == searchCats.length) {
+				var outtime = new Date().getTime()-mytime;
+				console.log("FindBy took "+outtime+"ms");
+			}
 		}
 		
 	
@@ -216,6 +347,8 @@ i2b2.ONT.ctrlr.FindBy = {
 		searchOptions.ont_max_records = "max='"+i2b2.ONT.view['find'].params.max+"' ";
 		searchOptions.ont_synonym_records = i2b2.ONT.view['find'].params.synonyms;
 		searchOptions.ont_hidden_records = i2b2.ONT.view['find'].params.hiddens;
+		searchOptions.ont_reduce_results = i2b2.ONT.view['find'].params.reduce;
+		searchOptions.ont_hierarchy = i2b2.ONT.view['find'].params.hierarchy;
 		searchOptions.ont_search_strategy = inSearchData.Strategy;
 		searchOptions.ont_search_string = inSearchData.SearchStr;
 			
@@ -230,8 +363,6 @@ i2b2.ONT.ctrlr.FindBy = {
 			i2b2.ONT.ajax.GetNameInfo("ONT:FindBy", searchOptions, scopedCallback);
 
 		}
-			
-
 
 	},
 
@@ -343,11 +474,11 @@ i2b2.ONT.ctrlr.FindBy = {
 				// we have a proper error msg
 				try {
 					if (s[0].firstChild.nodeValue == "MAX_EXCEEDED")
-						alert("Max number of terms exceeded please try with a more specific query.");
+						i2b2.h.nonmodalAlert("Max number of terms exceeded please try with a more specific query.");
 					else
 						alert("ERROR: "+s[0].firstChild.nodeValue);	
 					document.getElementById('ontFindNameButtonWorking').style.display = 'none';						
-					return;
+					//return;
 				} catch (e) {
 					alert("An unknown error has occured during your rest call attempt!");
 				}
@@ -531,6 +662,7 @@ i2b2.ONT.ctrlr.FindBy = {
 				var renderOptions = {
 					title: o.name,
 					dragdrop: "i2b2.sdx.TypeControllers.CONCPT.AttachDrag2Data",
+					click: "i2b2.ONT.view.info.SetKey('"+encodeURI(o.key)+"')",
 					showchildren: false,
 					icon: {
 						root: "sdx_ONT_CONCPT_root.gif",
